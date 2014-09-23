@@ -140,5 +140,8 @@
     <ClInclude Include="csimplesocket\StatTimer.h">
       <Filter>Header Files\csimplesocket</Filter>
     </ClInclude>
+    <ClInclude Include="Utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
