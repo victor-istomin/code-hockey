@@ -5,9 +5,15 @@
 
 #include "Strategy.h"
 #include "Utils.h"
+#include <memory>
+
+class Statistics;
 
 class MyStrategy : public Strategy 
 {
+	typedef void (MyStrategy::* TActionPtr)();
+	typedef std::vector<FirePosition>   TFirePositions;
+
 	const model::Hockeyist* m_self;
 	const model::World*     m_world; 
 	const model::Game*      m_game; 
@@ -39,18 +45,21 @@ private:
 
 	//! defend teammate
 	void defendTeammate();
+	
+	//! just rest after goal
+	void haveRest();
 
-	typedef void (MyStrategy::* TActionPtr)();
-	typedef std::vector<FirePosition> TFirePositions;
-
-	// get current strategy action
+	//! get current strategy action
 	TActionPtr getCurrentAction();
+	
+	void updateStatistics();	
 
 	// ---- utils
 
 	Point getOpponentNet() const;              //! get preferred attack point in net
 	Point getEstimatedPuckPos() const;
 	Point getFirePoint() const;
+	Point getSubstitutionPoint() const;
 
 	const std::vector<model::Hockeyist>& getHockeyists() const { return m_world->getHockeyists(); }
 	const model::Hockeyist* getNearestOpponent() const;

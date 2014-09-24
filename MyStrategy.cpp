@@ -1,4 +1,5 @@
 #include "MyStrategy.h"
+#include "Statistics.h"
 #define _USE_MATH_DEFINES
 
 #include <cmath>
@@ -11,8 +12,11 @@ const double MyStrategy::STRIKE_ANGLE = PI / 180.0;
 
 void MyStrategy::move(const Hockeyist& self, const World& world, const Game& game, Move& move) 
 {
+	// update service pointers and statistics
 	update(&self, &world, &game, &move);
-
+	updateStatistics();
+	
+	// perform actions
 	TActionPtr action = getCurrentAction();
 	(this->*action)();
 
@@ -31,6 +35,7 @@ MyStrategy::~MyStrategy()
 {
 }
 
+// =======================================================================================================
 
 void MyStrategy::attackPuck()
 {
@@ -59,11 +64,11 @@ void MyStrategy::attackNet()
 
 	if (distanceToFire < m_self->getRadius() + m_game->getStickLength()) // start aiming a bit before fire point
 	{
-		// swing and fire
 
 		m_move->setTurn(angleToNet);
 		m_move->setSpeedUp(1.0);
 
+		// swing and fire
 		if (std::abs(angleToNet) < STRIKE_ANGLE) 
 		{
 			m_move->setAction(ActionType::SWING);
@@ -77,8 +82,40 @@ void MyStrategy::attackNet()
 	}
 }
 
+void MyStrategy::haveRest()
+{
+	Point exit = getSubstitutionPoint();
+	
+	static const double substitutionDistance = m_game->getSubstitutionAreaHeight();
+	static const double fastRunDistance = substitutionDistance * 3;
+	const double        currentDistance = m_self->getDistanceTo(exit.x, exit.y);
+	if (currentDistance > substitutionDistance)
+	{
+		m_move->setTurn(m_self->getAngleTo(exit.x, exit.y));
+		m_move->setSpeedUp(currentDistance > fastRunDistance ? 1.0 : 0.2);
+	}
+	else
+	{
+		double angleToCamera = m_self->getAngleTo(m_self->getX(), m_game->getRinkBottom());
+		if (abs(angleToCamera) > STRIKE_ANGLE)
+		{
+			m_move->setTurn(angleToCamera);
+		}
+	}
+	
+	// TODO - susbtitute support
+}
+
+// =====================================================================================
+
 MyStrategy::TActionPtr MyStrategy::getCurrentAction()
 {
+	if (m_world->getMyPlayer().isJustMissedGoal() 
+	 || m_world->getOpponentPlayer().isJustMissedGoal())
+	{
+		return &MyStrategy::haveRest;
+	}
+	
 	if (m_world->getPuck().getOwnerPlayerId() == m_world->getMyPlayer().getId())
 	{
 		if (m_world->getPuck().getOwnerHockeyistId() == m_self->getId())
@@ -94,6 +131,8 @@ MyStrategy::TActionPtr MyStrategy::getCurrentAction()
 	return &MyStrategy::attackPuck;
 }
 
+// ======================================================================================
+
 Point MyStrategy::getOpponentNet() const
 {
 	const Player& opponent = m_world->getOpponentPlayer();
@@ -102,8 +141,7 @@ Point MyStrategy::getOpponentNet() const
 	double netY = (opponent.getNetBottom() + opponent.getNetTop()) / 2;
 	netY += (m_self->getY() < netY ? 0.5 : -0.5) * m_game->getGoalNetHeight();  // attack far corner
 
-	Point net = Point(netX, netY);
-	return net;
+	return Point(netX, netY);
 }
 
 void MyStrategy::defendTeammate()
@@ -264,4 +302,49 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 	}
 
 	return positions;
+}
+
+void MyStrategy::updateStatistics()
+{
+	// init statistics
+	if (!Statistics::instance())
+	{
+		Point topLeftRink       = Point(m_game->getRinkLeft(),  m_game->getRinkTop());
+		Point bottomRightRink   = Point(m_game->getRinkRight(), m_game->getRinkTop() + m_game->getSubstitutionAreaHeight());
+		Statistics::Side mySide = Statistics::eUNKNOWN;
+		
+		if (m_world->getMyPlayer().getNetFront() < m_world->getOpponentPlayer().getNetFront())
+		{
+			// my side is on the left
+			mySide = Statistics::eLEFT_SIDE;
+			bottomRightRink.x /= 2.0;
+		}
+		else
+		{
+		    mySide = Statistics::eRIGHT_SIDE;
+			topLeftRink.x = bottomRightRink.x / 2.0;
+		}
+		
+		Statistics::init(Range(topLeftRink, bottomRightRink), mySide);
+	}
+}
+
+Point MyStrategy::getSubstitutionPoint() const
+{
+	Point                  result      = Point(m_self->getX(), m_self->getY());
+	const Range            targetRange = Statistics::instance()->getSubstitutionRange();
+	const Statistics::Side mySide      = Statistics::instance()->getMySide();
+	
+	if (targetRange.isPointInside(result))
+		return result;
+	
+	result.y = m_game->getRinkTop() + m_self->getRadius();
+	if (!targetRange.isXInside(result.x))
+	{
+		result.x = mySide == Statistics::eLEFT_SIDE 
+		             ? targetRange.m_rightBottom.x - m_self->getRadius()
+					 : targetRange.m_topLeft.x     + m_self->getRadius();
+	}
+	
+	return result;
 }
