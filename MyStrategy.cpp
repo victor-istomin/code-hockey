@@ -6,6 +6,15 @@
 #include <cstdlib>
 #include <algorithm>
 
+/**/
+#ifdef _DEBUG
+#include <windows.h>
+#undef min
+#undef max
+#endif
+/**/
+
+
 using namespace model;
 
 const double MyStrategy::STRIKE_ANGLE = PI / 180.0;
@@ -49,17 +58,39 @@ void MyStrategy::attackPuck()
 
 void MyStrategy::attackNet()
 {
-	if(m_self->getState() == HockeyistState::SWINGING)
+	if (m_self->getState() == HockeyistState::SWINGING)
 	{
-		m_move->setAction(ActionType::STRIKE);
-		Statistics::instance()->getPlayer().attack();
+		if(m_self->getRemainingCooldownTicks() == 0)
+		{
+			m_move->setAction(ActionType::STRIKE);
+			Statistics::instance()->getPlayer().attack();
+#ifdef _DEBUG
+			/**/
+			std::string msg = " !! strike: " + std::to_string(m_self->getId())
+				+ std::to_string(m_self->getX()) + "," + std::to_string(m_self->getY()) + "; s " 
+				+ std::to_string(m_self->getSpeedX()) + ", " + std::to_string(m_self->getSpeedY()) + "\n";
+			::OutputDebugStringA(msg.c_str());
+			/**/
+#endif
+		}
+		else
+		{
+			/**/
+#ifdef _DEBUG
+			::OutputDebugStringA( " .. cooldown\n");
+#endif
+			/**/
+		}
 		return;
 	}
 
+	static const unsigned STRIKE_TIME = 10;    // TODO - variable strike time?
+
 	const Point net       = getOpponentNet();
 	const Point firePoint = getFirePoint();
+	const Hockeyist ghost = getGhost(*m_self, STRIKE_TIME);
 
-	double angleToNet       = m_self->getAngleTo(net.x, net.y);
+	double angleToNet       = ghost.getAngleTo(net.x, net.y);
 	double angleToFirePoint = m_self->getAngleTo(firePoint.x, firePoint.y);
 	double distanceToFire   = m_self->getDistanceTo(firePoint.x, firePoint.y);
 
@@ -73,6 +104,16 @@ void MyStrategy::attackNet()
 		if (std::abs(angleToNet) < STRIKE_ANGLE) 
 		{
 			m_move->setAction(ActionType::SWING);
+
+			/**/
+#ifdef _DEBUG
+			std::string msg = " ?? strike prediction: " + std::to_string(m_self->getId()) + "g: " 
+				+ std::to_string(ghost.getX()) + "," + std::to_string(ghost.getY()) 
+				+ "; self: " + std::to_string(m_self->getX()) + "," + std::to_string(m_self->getY()) + "; s " 
+				+ std::to_string(ghost.getSpeedX()) + ", " + std::to_string(ghost.getSpeedY()) + "\n";
+			::OutputDebugStringA(msg.c_str());
+#endif
+			/**/
 		}
 	}
 	else
@@ -352,4 +393,15 @@ Point MyStrategy::getSubstitutionPoint() const
 	}
 	
 	return result;
+}
+
+model::Hockeyist MyStrategy::getGhost(const model::Hockeyist& from, unsigned ticksIncrement)
+{
+	static const double kFrictionLoses = 0.95;
+	const double speedLose = pow(kFrictionLoses, ticksIncrement);
+
+	double x = from.getX() + from.getSpeedX() * ticksIncrement * kFrictionLoses;
+	double y = from.getY() + from.getSpeedY() * ticksIncrement * kFrictionLoses;
+	return Hockeyist(0, 0, 0, 0, from.getRadius(),  x, y, from.getSpeedX() * speedLose, from.getSpeedY() * speedLose, from.getAngle(), from.getAngularSpeed(), 
+		from.isTeammate(), from.getType(), 0, 0, 0, 0, 0, from.getState(), 0, 0, 0, 0, from.getLastAction(), from.getLastActionTick());
 }

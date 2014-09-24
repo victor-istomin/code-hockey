@@ -65,6 +65,9 @@ private:
 	const model::Hockeyist* getNearestOpponent() const;
 
 	TFirePositions fillFirePositions() const;
+
+	//! get ghost from the future
+	model::Hockeyist getGhost(const model::Hockeyist& from, unsigned ticksIncrement);
 };
 
 #endif

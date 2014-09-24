@@ -26,5 +26,6 @@ Statistics::~Statistics()
 std::string PlayerStatistics::toString()
 {
 	return m_name + "; score: " + std::to_string(m_goalsMade) + "; got: " + std::to_string(m_goalsGot) 
-	              + "; attacks: " + std::to_string(m_attacksCount) + "; crashed: " + std::string(m_isCrashed ? "true" : "false");
+	              + "; attacks: " + std::to_string(m_attacksCount) + "(" + std::to_string(m_goalsMade * 100.0 / m_attacksCount)
+				  + "%); crashed: " + std::string(m_isCrashed ? "true" : "false");
 }
