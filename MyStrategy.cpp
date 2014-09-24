@@ -52,6 +52,7 @@ void MyStrategy::attackNet()
 	if(m_self->getState() == HockeyistState::SWINGING)
 	{
 		m_move->setAction(ActionType::STRIKE);
+		Statistics::instance()->getPlayer().attack();
 		return;
 	}
 
@@ -306,14 +307,16 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 
 void MyStrategy::updateStatistics()
 {
+	const Player& me = m_world->getMyPlayer();
+
 	// init statistics
 	if (!Statistics::instance())
 	{
 		Point topLeftRink       = Point(m_game->getRinkLeft(),  m_game->getRinkTop());
 		Point bottomRightRink   = Point(m_game->getRinkRight(), m_game->getRinkTop() + m_game->getSubstitutionAreaHeight());
 		Statistics::Side mySide = Statistics::eUNKNOWN;
-		
-		if (m_world->getMyPlayer().getNetFront() < m_world->getOpponentPlayer().getNetFront())
+
+		if (me.getNetFront() < m_world->getOpponentPlayer().getNetFront())
 		{
 			// my side is on the left
 			mySide = Statistics::eLEFT_SIDE;
@@ -325,8 +328,10 @@ void MyStrategy::updateStatistics()
 			topLeftRink.x = bottomRightRink.x / 2.0;
 		}
 		
-		Statistics::init(Range(topLeftRink, bottomRightRink), mySide);
+		Statistics::init(Range(topLeftRink, bottomRightRink), mySide, m_world->getMyPlayer().getName());
 	}
+
+	Statistics::instance()->getPlayer().update(me.getGoalCount(), m_world->getOpponentPlayer().getGoalCount(), me.isStrategyCrashed());
 }
 
 Point MyStrategy::getSubstitutionPoint() const
