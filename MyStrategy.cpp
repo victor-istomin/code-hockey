@@ -3,11 +3,11 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
 
 using namespace model;
 
 const double MyStrategy::STRIKE_ANGLE = PI / 180;
-
 
 void MyStrategy::move(const Hockeyist& self, const World& world, const Game& game, Move& move) 
 {
@@ -27,11 +27,17 @@ MyStrategy::MyStrategy()
 { 
 }
 
+MyStrategy::~MyStrategy()
+{
+}
+
 
 void MyStrategy::attackPuck()
 {
+	const Point puckPos = getEstimatedPuckPos();
+
 	m_move->setSpeedUp(1.0);
-	m_move->setTurn(m_self->getAngleTo(m_world->getPuck()));
+	m_move->setTurn(m_self->getAngleTo(puckPos.x, puckPos.y));
 	m_move->setAction(m_self->getState() == SWINGING ? ActionType::CANCEL_STRIKE : ActionType::TAKE_PUCK);
 }
 
@@ -92,7 +98,9 @@ void MyStrategy::defendTeammate()
 		return;
 
 	double angleToNearest = m_self->getAngleTo(*nearest); 
-	bool   isCanStrike    = m_self->getDistanceTo(*nearest) < m_game->getStickLength() && angleToNearest < (m_game->getStickSector() / 2.0);
+	bool   isCanStrike    = m_self->getDistanceTo(*nearest) < m_game->getStickLength() 
+		                 && m_self->getRemainingCooldownTicks() == 0
+		                 && angleToNearest < (m_game->getStickSector() / 2.0);
 
 	if (m_self->getState() == HockeyistState::SWINGING)
 	{
@@ -122,7 +130,6 @@ void MyStrategy::defendTeammate()
 	const Hockeyist* nearest = nullptr;
 	for (const Hockeyist& hockeist: m_world->getHockeyists())
 	{
-		// TODO - look for hearest to teammate with puck?
 		if (hockeist.isTeammate() || hockeist.getState() == HockeyistState::RESTING)
 			continue;
 
@@ -135,3 +142,34 @@ void MyStrategy::defendTeammate()
 
 	return nearest;
 }
+
+Point MyStrategy::getEstimatedPuckPos() const
+{
+	const Puck& puck = m_world->getPuck();
+	Point result = Point(puck.getX(), puck.getY());
+
+	double distance = m_self->getDistanceTo(puck);
+	double xSpeed   = m_self->getSpeedX() - puck.getSpeedX();
+	double ySpeed   = m_self->getSpeedY() - puck.getSpeedY();
+	
+	if(xSpeed < 0 || ySpeed < 0)
+	{
+		// TODO - implement predict when loosing puck
+	}
+	else if (distance > m_game->getStickLength() * 2)
+	{
+		double speed = sqrt(xSpeed*xSpeed + ySpeed*ySpeed);
+		double time  = speed > 0.1 ? distance / speed : 0;
+
+		double predictX = puck.getX() + time * puck.getSpeedX() / 2.0;  // TODO: friction
+		double predictY = puck.getY() + time * puck.getSpeedY() / 2.0;  // TODO: friction
+
+		if (predictX > 0 && predictX < m_world->getWidth() && predictY > 0 && predictY < m_world->getHeight())
+		{
+			result = Point(predictX, predictY);
+		}
+	}
+
+	return result;
+}
+

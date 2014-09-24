@@ -25,6 +25,7 @@ class MyStrategy : public Strategy
 
 public:
     MyStrategy();
+	~MyStrategy();
 
 
     void move(const model::Hockeyist& self, const model::World& world, const model::Game& game, model::Move& move);
@@ -47,6 +48,7 @@ private:
 	// ---- utils
 
 	Point getOpponentNet() const;              //! get preferred attack point in net
+	Point getEstimatedPuckPos() const;
 	const model::Hockeyist* getNearestOpponent() const;
 };
 
