@@ -50,15 +50,30 @@ void MyStrategy::attackNet()
 		return;
 	}
 
-	const Point net = getOpponentNet();
+	const Point net       = getOpponentNet();
+	const Point firePoint = getFirePoint();
 
-	double angleToNet = m_self->getAngleTo(net.x, net.y);
-	m_move->setTurn(angleToNet);
-	m_move->setSpeedUp(1.0);
+	double angleToNet       = m_self->getAngleTo(net.x, net.y);
+	double angleToFirePoint = m_self->getAngleTo(firePoint.x, firePoint.y);
+	double distanceToFire   = m_self->getDistanceTo(firePoint.x, firePoint.y);
 
-	if (abs(angleToNet) < STRIKE_ANGLE) 
+	if (distanceToFire < m_self->getRadius() + m_game->getStickLength()) // start aiming a bit before fire point
 	{
-		m_move->setAction(ActionType::SWING);
+		// swing and fire
+
+		m_move->setTurn(angleToNet);
+		m_move->setSpeedUp(1.0);
+
+		if (abs(angleToNet) < STRIKE_ANGLE) 
+		{
+			m_move->setAction(ActionType::SWING);
+		}
+	}
+	else
+	{
+		// move to fire point. TODO: obstacles?
+		m_move->setTurn(angleToFirePoint);
+		m_move->setSpeedUp(1.0);
 	}
 }
 
@@ -128,7 +143,7 @@ void MyStrategy::defendTeammate()
  const Hockeyist* MyStrategy::getNearestOpponent() const
 {
 	const Hockeyist* nearest = nullptr;
-	for (const Hockeyist& hockeist: m_world->getHockeyists())
+	for (const Hockeyist& hockeist: getHockeyists())
 	{
 		if (hockeist.isTeammate() || hockeist.getState() == HockeyistState::RESTING)
 			continue;
@@ -171,5 +186,82 @@ Point MyStrategy::getEstimatedPuckPos() const
 	}
 
 	return result;
+}
+
+Point MyStrategy::getFirePoint() const
+{
+	const auto& hockeyists = getHockeyists();
+	bool isGoalkeeperPresent = std::find_if(begin(hockeyists), end(hockeyists), [](const Hockeyist& h){ return !h.isTeammate() && h.getType() == GOALIE;} ) 
+		                           != end(hockeyists);
+
+	if (!isGoalkeeperPresent) 
+	{
+		// if no goalkeeper present - fire from any position
+		return Point(m_self->getX(), m_self->getY());
+	}
+
+	// find 45 degree line for fire from
+	TFirePositions positions = fillFirePositions();
+
+	// sort positions by < (distance+penalty)
+	std::sort( begin(positions), end(positions), 
+		[](const FirePosition& a, const FirePosition& b) {return a.m_distance + a.m_enemyPenalty < b.m_distance + b.m_enemyPenalty;} );
+
+	Point fire = positions.empty() ? Point(m_self->getX(), m_self->getX()) : positions.front().m_pos;
+
+	// don't go above top or bottom
+	fire.y = std::max(fire.y, m_self->getRadius());       
+	fire.y = std::min(fire.y, m_world->getHeight() - m_self->getRadius());
+
+	return fire;
+}
+
+MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
+{
+	TFirePositions positions;
+	int height     = static_cast<int>(m_game->getWorldHeight());
+	int width      = static_cast<int>(m_game->getWorldWidth());
+	int unitRadius = static_cast<int>(m_self->getRadius());
+
+	const auto& hockeists = getHockeyists();
+
+	positions.reserve(std::min(height, width) / unitRadius * 2);
+
+	const double dangerRadius = m_self->getRadius() + m_game->getStickLength();
+
+	Point goal = getOpponentNet();
+	int   xDirection = m_world->getMyPlayer().getNetFront() > m_world->getOpponentPlayer().getNetFront() ? 1 /*I'm at right*/ : -1/*I'm at left*/;
+	int   yDirection = m_self->getY() > goal.y ? unitRadius : -unitRadius;
+	int   yThreshold = yDirection > 0 ? height : 0;
+
+	for (double y = goal.y + yDirection; abs(yThreshold-y) > abs(yDirection); y += yDirection / 2.0)
+	{
+		double delta   = abs(y - goal.y);
+		double x       = goal.x + delta * xDirection;
+		int    penalty = 0;
+
+		// calculate danger penalty: TODO: what if path to (x,y) is blocked?
+		for (const Hockeyist& hockeist: hockeists)
+		{
+			double dangerFactor = 1;
+			if(hockeist.isTeammate())
+			{
+				dangerFactor = hockeist.getId() == m_self->getId() ? -1 : -0.5;
+			}
+			else
+			{
+				dangerFactor = hockeist.getType() != HockeyistType::GOALIE ? 1 : 2;
+			}
+
+			double danger = dangerRadius / hockeist.getDistanceTo(x, y);
+			danger *= danger;  // TODO - is this needed?
+			
+			penalty += static_cast<int>(danger * dangerFactor * m_game->getStickLength());
+		}
+
+		positions.push_back(FirePosition(Point(x, y), static_cast<int>(m_self->getDistanceTo(x, y)), penalty));
+	}
+
+	return positions;
 }
 
