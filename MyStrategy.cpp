@@ -7,7 +7,7 @@
 
 using namespace model;
 
-const double MyStrategy::STRIKE_ANGLE = PI / 180;
+const double MyStrategy::STRIKE_ANGLE = PI / 180.0;
 
 void MyStrategy::move(const Hockeyist& self, const World& world, const Game& game, Move& move) 
 {
@@ -64,7 +64,7 @@ void MyStrategy::attackNet()
 		m_move->setTurn(angleToNet);
 		m_move->setSpeedUp(1.0);
 
-		if (abs(angleToNet) < STRIKE_ANGLE) 
+		if (std::abs(angleToNet) < STRIKE_ANGLE) 
 		{
 			m_move->setAction(ActionType::SWING);
 		}
@@ -265,4 +265,3 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 
 	return positions;
 }
-
