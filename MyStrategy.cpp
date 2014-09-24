@@ -210,8 +210,8 @@ Point MyStrategy::getFirePoint() const
 	Point fire = positions.empty() ? Point(m_self->getX(), m_self->getX()) : positions.front().m_pos;
 
 	// don't go above top or bottom
-	fire.y = std::max(fire.y, m_self->getRadius());       
-	fire.y = std::min(fire.y, m_world->getHeight() - m_self->getRadius());
+	fire.y = std::max(fire.y, m_game->getRinkTop() + m_self->getRadius());       
+	fire.y = std::min(fire.y, m_game->getRinkBottom() - m_self->getRadius());
 
 	return fire;
 }
@@ -219,20 +219,21 @@ Point MyStrategy::getFirePoint() const
 MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 {
 	TFirePositions positions;
-	int height     = static_cast<int>(m_game->getWorldHeight());
+	int top        = static_cast<int>(m_game->getRinkTop());
+	int bottom     = static_cast<int>(m_game->getRinkBottom());
 	int width      = static_cast<int>(m_game->getWorldWidth());
 	int unitRadius = static_cast<int>(m_self->getRadius());
 
 	const auto& hockeists = getHockeyists();
 
-	positions.reserve(std::min(height, width) / unitRadius * 2);
+	positions.reserve(std::min(bottom - top, width) / unitRadius * 2);
 
 	const double dangerRadius = m_self->getRadius() + m_game->getStickLength();
 
 	Point goal = getOpponentNet();
 	int   xDirection = m_world->getMyPlayer().getNetFront() > m_world->getOpponentPlayer().getNetFront() ? 1 /*I'm at right*/ : -1/*I'm at left*/;
 	int   yDirection = m_self->getY() > goal.y ? unitRadius : -unitRadius;
-	int   yThreshold = yDirection > 0 ? height : 0;
+	int   yThreshold = yDirection > 0 ? bottom : top;
 
 	for (double y = goal.y + yDirection; abs(yThreshold-y) > abs(yDirection); y += yDirection / 2.0)
 	{
