@@ -84,11 +84,13 @@ void MyStrategy::attackNet()
 		return;
 	}
 
-	static const unsigned STRIKE_TIME = 10;    // TODO - variable strike time?
 
 	const Point net       = getOpponentNet();
 	const Point firePoint = getFirePoint();
-	const Hockeyist ghost = getGhost(*m_self, STRIKE_TIME);
+
+	// TODO - variable [0, 10, 20] strike time?
+	unsigned strikeTime = static_cast<unsigned>(m_game->getSwingActionCooldownTicks() + abs(m_self->getAngleTo(net.x, net.y) / m_game->getHockeyistTurnAngleFactor()));
+	const Hockeyist ghost = getGhost(*m_self, strikeTime);
 
 	double angleToNet       = ghost.getAngleTo(net.x, net.y);
 	double angleToFirePoint = m_self->getAngleTo(firePoint.x, firePoint.y);
@@ -107,10 +109,12 @@ void MyStrategy::attackNet()
 
 			/**/
 #ifdef _DEBUG
-			std::string msg = " ?? strike prediction: " + std::to_string(m_self->getId()) + "g: " 
-				+ std::to_string(ghost.getX()) + "," + std::to_string(ghost.getY()) 
-				+ "; self: " + std::to_string(m_self->getX()) + "," + std::to_string(m_self->getY()) + "; s " 
-				+ std::to_string(ghost.getSpeedX()) + ", " + std::to_string(ghost.getSpeedY()) + "\n";
+			std::string msg = " ?? strike prediction: " + std::to_string(m_self->getId()) 
+				+ "g: " + std::to_string(ghost.getX()) + "," + std::to_string(ghost.getY()) 
+				+ "; s: " + std::to_string(m_self->getX()) + "," + std::to_string(m_self->getY())
+				+ "; v: " + std::to_string(ghost.getSpeedX()) + ", " + std::to_string(ghost.getSpeedY()) 
+				+ "; dt: " + std::to_string(strikeTime)
+				+ "\n";
 			::OutputDebugStringA(msg.c_str());
 #endif
 			/**/
