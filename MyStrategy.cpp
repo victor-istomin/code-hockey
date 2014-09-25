@@ -316,10 +316,14 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 
 	Point goal = getOpponentNet();
 	int   xDirection = m_world->getMyPlayer().getNetFront() > m_world->getOpponentPlayer().getNetFront() ? 1 /*I'm at right*/ : -1/*I'm at left*/;
-	int   yDirection = m_self->getY() > goal.y ? unitRadius : -unitRadius;
-	int   yThreshold = yDirection > 0 ? bottom : top;
+	int   yDirection = m_self->getY() > goal.y ? 1 : -1;
+	int   yThreshold = yDirection > 0 ? bottom - unitRadius : top + unitRadius;
+    int   yMargin    = yDirection * unitRadius * 4;   // don't go too close to goalkeeper. TODO: get margin by goalkeeper position
 
-	for (double y = goal.y + yDirection; abs(yThreshold-y) > abs(yDirection); y += yDirection / 2.0)
+    auto isBottomCrossed = [yThreshold](double y){return y > yThreshold;};
+    auto isTopCrossed    = [yThreshold](double y){return y < yThreshold;};
+
+	for (double y = goal.y + yMargin; yDirection > 0 ? !isBottomCrossed(y) : !isTopCrossed(y); y += yDirection * unitRadius / 2.0)
 	{
 		double delta   = abs(y - goal.y);
 		double x       = goal.x + delta * xDirection;
@@ -335,7 +339,7 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 			}
 			else
 			{
-				dangerFactor = hockeist.getType() != HockeyistType::GOALIE ? 1 : 2;
+				dangerFactor = 1;
 			}
 
 			double danger = dangerRadius / hockeist.getDistanceTo(x, y);
