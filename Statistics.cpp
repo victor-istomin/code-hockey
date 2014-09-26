@@ -15,7 +15,7 @@ Statistics::~Statistics()
 {
 #ifdef _DEBUG
 	// unload statistics to file
-	const std::string filename = "stats_" + std::to_string(time(nullptr)) + "_" + std::to_string(clock()) + ".log";
+	const std::string filename = "stats_" + toString(time(nullptr)) + "_" + toString(clock()) + ".log";
 
 	std::ofstream out = std::ofstream(filename, std::ios::trunc);
 	out << "Finished. Side: " << (m_mySide == eLEFT_SIDE ? "left" : "right") << std::endl
@@ -36,8 +36,8 @@ void Statistics::onPuckLoose()
 std::string PlayerStatistics::toString()
 {
 #ifdef _DEBUG
-	return m_name + "; score: " + std::to_string(m_goalsMade) + "; got: " + std::to_string(m_goalsGot) 
-	              + "; attacks: " + std::to_string(m_attacksCount) + "(" + std::to_string(m_goalsMade * 100.0 / m_attacksCount)
+	return m_name + "; score: " + ::toString(m_goalsMade) + "; got: " + ::toString(m_goalsGot) 
+	              + "; attacks: " + ::toString(m_attacksCount) + "(" + ::toString(m_goalsMade * 100.0 / m_attacksCount)
 				  + "%); crashed: " + std::string(m_isCrashed ? "true" : "false");
 #else
 	return std::string();

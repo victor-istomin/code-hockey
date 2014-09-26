@@ -5,9 +5,12 @@
 #ifdef _DEBUG
 #	include <windows.h>
 #	include <string>
-inline void debugPrint(const std::string& s)		{::OutputDebugStringA((s+"\n").c_str());}
+    inline void debugPrint(const std::string& s)		            {::OutputDebugStringA((s+"\n").c_str());}
+    template <typename T> std::string toString(const T& var)        {return std::to_string(var);}
+
 #else
 #	define debugPrint(x) ;
+    template <typename T> std::string toString(const T& var)        {static const std::string fake; return fake;}
 #endif // _DEBUG
 
 inline double toDegrees(double radian)              { return radian * 180.0 / PI; }

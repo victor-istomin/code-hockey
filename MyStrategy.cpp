@@ -128,9 +128,9 @@ void MyStrategy::attackNet()
 			Statistics::instance()->getPlayer().attack();
 
 			/**/
-			debugPrint( " !! strike: " + std::to_string(m_self->getId())
-				+ std::to_string(m_self->getX()) + "," + std::to_string(m_self->getY()) + "; s " 
-				+ std::to_string(m_self->getSpeedX()) + ", " + std::to_string(m_self->getSpeedY()));
+			debugPrint( " !! strike: " + toString(m_self->getId())
+				+ toString(m_self->getX()) + "," + toString(m_self->getY()) + "; s " 
+				+ toString(m_self->getSpeedX()) + ", " + toString(m_self->getSpeedY()));
 			/**/
 		}
 		else
@@ -203,11 +203,11 @@ void MyStrategy::attackNet()
 			m_move->setAction(ActionType::SWING);
 
 			/**/
-			debugPrint( " ?? strike prediction: " + std::to_string(m_self->getId()) 
-				+ "g: " + std::to_string(ghost.getX()) + "," + std::to_string(ghost.getY()) 
-				+ "; s: " + std::to_string(m_self->getX()) + "," + std::to_string(m_self->getY())
-				+ "; v: " + std::to_string(ghost.getSpeedX()) + ", " + std::to_string(ghost.getSpeedY()) 
-				+ "; dt: " + std::to_string(strikeTime));
+			debugPrint( " ?? strike prediction: " + toString(m_self->getId()) 
+				+ "g: " + toString(ghost.getX()) + "," + toString(ghost.getY()) 
+				+ "; s: " + toString(m_self->getX()) + "," + toString(m_self->getY())
+				+ "; v: " + toString(ghost.getSpeedX()) + ", " + toString(ghost.getSpeedY()) 
+				+ "; dt: " + toString(strikeTime));
 			/**/
 		}
 	}
@@ -257,14 +257,14 @@ MyStrategy::TActionPtr MyStrategy::getCurrentAction()
 		findInitialDefender();
 		if (puckStatistics.m_lastPlayerId != m_world->getMyPlayer().getId())
 		{
-			debugPrint( "Tick: " + std::to_string(m_world->getTick()) + " initial defend needed" );
+			debugPrint( "Tick: " + toString(m_world->getTick()) + " initial defend needed" );
 
 			if (m_self->getId() == m_initialDefenderId)
 				return &MyStrategy::defendInitial;
 		}
 		else if(m_initialDefenderId != -1)
 		{
-			debugPrint( "Tick: " + std::to_string(m_world->getTick()) + " initial defend finished" );
+			debugPrint( "Tick: " + toString(m_world->getTick()) + " initial defend finished" );
 			m_initialDefenderId = -1;
 		}
 	}
@@ -486,7 +486,8 @@ MyStrategy::TFirePositions MyStrategy::fillDefenderPositions(const model::Hockey
 	if (abs(attacker->getY() - centerY) < 5)
 	{
 		// attacker is not decided yet, just go back to goalie
-		return TFirePositions(1, FirePosition(Point((defender->getX() + goalkeeper->getX())/2, defender->getY()), 0, 0));
+		double goalkeeperX = goalkeeper ? goalkeeper->getX() : m_world->getMyPlayer().getNetFront();
+		return TFirePositions(1, FirePosition(Point((defender->getX() + goalkeeperX)/2, defender->getY()), 0, 0));
 	}
 
 	positions.reserve(std::min(bottom - top, width) / unitRadius * 2);
