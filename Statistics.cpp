@@ -23,6 +23,16 @@ Statistics::~Statistics()
 #endif
 }
 
+void Statistics::onPuckLoose()
+{
+	while (!m_plCallbacks.empty())
+	{
+		TPuckLooseCallback callback = std::move(m_plCallbacks.top());
+		m_plCallbacks.pop();
+		callback();
+	}
+}
+
 std::string PlayerStatistics::toString()
 {
 #ifdef _DEBUG

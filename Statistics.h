@@ -2,6 +2,8 @@
 #include "Utils.h"
 #include <memory>
 #include <string>
+#include <functional>
+#include <stack>
 
 struct PlayerStatistics
 {
@@ -42,14 +44,16 @@ public:
 		eRIGHT_SIDE,
 	};
 
-	typedef long long TId;
+	typedef long long              TId;
+	typedef std::function<void()>  TPuckLooseCallback;
 
 private:
-	Range            m_subsituteRange;
-	Side             m_mySide;
-	PlayerStatistics m_player;
-	PuckStatistics   m_puck;
-	
+	Range               m_subsituteRange;
+	Side                m_mySide;
+	PlayerStatistics    m_player;
+	PuckStatistics      m_puck;
+
+	std::stack<TPuckLooseCallback>     m_plCallbacks;
 	static std::unique_ptr<Statistics> m_instance;
 
 	Statistics(const Range& subsituteRange, Side mySide, const std::string& playerName ) 
@@ -70,6 +74,9 @@ public:
 
 	PlayerStatistics& getPlayer()             {return m_player;}
 	PuckStatistics&   getPuck()               {return m_puck;}
+
+	void registerOnPuckLoose(TPuckLooseCallback&& c)	{m_plCallbacks.push(std::move(c));}
+	void onPuckLoose();
 };
 
 

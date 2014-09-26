@@ -43,6 +43,13 @@ struct FirePosition
 	{}
 };
 
+enum class PreferredFire
+{
+	eUNKNOWN = 0,
+	eUP,
+	eDOWN,
+};
+
 template <typename Container, typename Predicate>
 typename Container::const_iterator find_if(const Container& c, const Predicate& p)
 {

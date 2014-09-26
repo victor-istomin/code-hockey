@@ -6,6 +6,7 @@
 #include "Strategy.h"
 #include "Utils.h"
 #include <memory>
+#include <map>
 
 class Statistics;
 
@@ -14,14 +15,17 @@ class MyStrategy : public Strategy
 	typedef void (MyStrategy::* TActionPtr)();
 	typedef std::vector<FirePosition>     TFirePositions;
 	typedef std::vector<model::Hockeyist> THockeyists;
+	typedef long long                     TId;
 
 	const model::Hockeyist* m_self;
 	const model::World*     m_world; 
 	const model::Game*      m_game; 
 	model::Move*            m_move;
 
-	static const double STRIKE_ANGLE;
-	static long long    m_initialDefenderId;
+
+	static const double                 STRIKE_ANGLE;
+	static TId                          m_initialDefenderId;
+	static std::map<TId, PreferredFire> m_firePositionMap;  // id of hockeyist which wants to fire from far (not near!) angle
 
 	void update(const model::Hockeyist* self, const model::World* world, const model::Game* game, model::Move* move)
 	{
@@ -60,7 +64,7 @@ private:
 
 	// ---- utils
 
-	Point getNet(const model::Player& player, const model::Hockeyist& attacker) const;              //! get preferred attack point in net
+	Point getNet(const model::Player& player, const model::Hockeyist& attacker, PreferredFire preffered = PreferredFire::eUNKNOWN) const;        //! get preferred attack point in net
 	Point getEstimatedPuckPos() const;
 	Point getFirePoint() const;
 	Point getSubstitutionPoint() const;
