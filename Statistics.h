@@ -26,8 +26,8 @@ private:
 
 struct PuckStatistics
 {
-	bool      m_isJustReset;
 	bool      m_isFirstCatch;
+	bool      m_isJustReset;
 	long long m_lastPlayerId;
 
 	PuckStatistics() : m_isFirstCatch(true), m_isJustReset(true), m_lastPlayerId(-1)    {}

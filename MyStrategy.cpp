@@ -55,6 +55,8 @@ void MyStrategy::attackPuck()
 	m_move->setSpeedUp(1.0);
 	m_move->setTurn(m_self->getAngleTo(puckPos.x, puckPos.y));
 	m_move->setAction(m_self->getState() == SWINGING ? ActionType::CANCEL_STRIKE : ActionType::TAKE_PUCK);
+	
+	improveManeuverability(); // TODO - check me!
 }
 
 void MyStrategy::defendInitial()
@@ -216,6 +218,7 @@ void MyStrategy::attackNet()
 		// move to fire point. TODO: obstacles?
 		m_move->setTurn(angleToFirePoint);
 		m_move->setSpeedUp(1.0);
+		improveManeuverability(); // TODO - check me!
 	}
 }
 
@@ -239,6 +242,8 @@ void MyStrategy::haveRest()
 			m_move->setTurn(angleToCamera);
 		}
 	}
+	
+	improveManeuverability(); // TODO - check me!
 	
 	// TODO - substitute support
 }
@@ -509,7 +514,8 @@ MyStrategy::TFirePositions MyStrategy::fillDefenderPositions(const model::Hockey
 	{
 		double delta   = abs(y - goal.y);
 		double x       = goal.x + delta * xDirection;
-		int    penalty = static_cast<int>(toDegrees(std::abs(defender->getAngleTo(x, y))) * std::max(0.5, std::abs(defender->getAngularSpeed())) / 2);
+		double angleDegrees = toDegrees(std::abs(defender->getAngleTo(x, y)));
+		int    penalty = static_cast<int>(angleDegrees / 2);
 
 		// TODO
 
@@ -658,4 +664,13 @@ bool MyStrategy::isInBetween(const Point& first, const model::Unit& inBetween, c
 	return dL < gap;
 }
 
-
+void MyStrategy::improveManeuverability()
+{
+	static const double kBrakeAngleThreshold = PI/4;
+	static const double kBrakeSpeedThreshold = m_game->getHockeyistSpeedDownFactor();
+	if (std::abs(m_move->getTurn()) > kBrakeAngleThreshold && toVectorSpeed(m_self->getSpeedX(), m_self->getSpeedY()) > kBrakeSpeedThreshold)
+	{
+		// TODO: try to move backwards if reasonable?
+		m_move->setSpeedUp(-1.0);
+	}	
+}
