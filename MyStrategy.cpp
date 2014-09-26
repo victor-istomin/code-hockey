@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <algorithm>
+#include <set>
 
 /**/
 #ifdef _DEBUG
@@ -54,9 +55,51 @@ void MyStrategy::attackPuck()
 
 	m_move->setSpeedUp(1.0);
 	m_move->setTurn(m_self->getAngleTo(puckPos.x, puckPos.y));
-	m_move->setAction(m_self->getState() == SWINGING ? ActionType::CANCEL_STRIKE : ActionType::TAKE_PUCK);
+	m_move->setAction(m_self->getState() == SWINGING ? CANCEL_STRIKE : TAKE_PUCK);
 	
 	improveManeuverability(); // TODO - check me!
+	
+	// if can't get reach puck, but can reach opponent - feel free to punch him if there is no teammate in between
+	// TODO - check this
+	const Puck&      puck       = m_world->getPuck();
+	const TId        ownerId    = puck.getOwnerHockeyistId(); 
+	const Hockeyist* puckOwner  = find_unit(getHockeyists(), [ownerId](const Hockeyist& h){return !h.isTeammate() && h.getId() == ownerId;});
+	if (!puckOwner)
+		return;
+	
+	const TId        attackerId = m_self->getId();
+	const Hockeyist* attacker   = m_self;
+	const Hockeyist* teammateBetween = find_unit(getHockeyists(), [attacker, puckOwner, this/*bug*/](const Hockeyist& h) 
+	{
+		return h.isTeammate() && MyStrategy::isInBetween(Point(attacker->getX(), attacker->getY()), h, *puckOwner, attacker->getRadius());
+	});
+	const Hockeyist* enemyBetween = find_unit(getHockeyists(), [attacker, puckOwner, this/*bug*/](const Hockeyist& h) 
+	{
+		return !h.isTeammate() && MyStrategy::isInBetween(Point(attacker->getX(), attacker->getY()), h, *puckOwner, attacker->getRadius());
+	});
+	
+	if (enemyBetween != nullptr)
+		teammateBetween = nullptr; // don't miss a chance to hit two enemies
+	
+	static std::set<TId> swingingOnEnemySet;
+	if ( !teammateBetween && m_self->getDistanceTo(puck) > m_game->getStickLength() && m_self->getDistanceTo(*puckOwner) < m_game->getStickLength()
+	  && std::abs(m_self->getAngleTo(*puckOwner)) < m_game->getStickSector() / 2)
+	{
+		if (swingingOnEnemySet.find(attackerId) != swingingOnEnemySet.end() || puckOwner->getState() == SWINGING)
+		{
+			swingingOnEnemySet.erase(attackerId);
+			m_move->setAction(STRIKE);
+		}			
+		else
+		{
+			swingingOnEnemySet.insert(attackerId);
+			m_move->setAction(SWING);
+		}
+	}
+	else
+	{
+		swingingOnEnemySet.erase(attackerId);
+	}
 }
 
 void MyStrategy::defendInitial()
@@ -640,7 +683,7 @@ const model::Hockeyist* MyStrategy::getPuckOwner() const
 	return find_unit(getHockeyists(), [ownerUnitId](const Hockeyist& h) {return h.getId() == ownerUnitId;});
 }
 
-bool MyStrategy::isInBetween(const Point& first, const model::Unit& inBetween, const model::Unit& second, double gap) const
+bool MyStrategy::isInBetween(const Point& first, const model::Unit& inBetween, const model::Unit& second, double gap)
 {
 	double distanceToFirst   = second.getDistanceTo(first.x, first.y);
 	double distanceToBetween = second.getDistanceTo(inBetween);

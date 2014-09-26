@@ -22,7 +22,6 @@ class MyStrategy : public Strategy
 	const model::Game*      m_game; 
 	model::Move*            m_move;
 
-
 	static const double                 STRIKE_ANGLE;
 	static TId                          m_initialDefenderId;
 	static std::map<TId, PreferredFire> m_firePositionMap;  // id of hockeyist which wants to fire from far (not near!) angle
@@ -81,7 +80,7 @@ private:
 	void findInitialDefender();
 
 	bool isRestTime() const {return m_world->getMyPlayer().isJustMissedGoal() || m_world->getOpponentPlayer().isJustMissedGoal(); }
-	bool isInBetween(const Point& first, const model::Unit& inBetween, const model::Unit& second, double gap) const;
+	static bool isInBetween(const Point& first, const model::Unit& inBetween, const model::Unit& second, double gap);
 
 	//! get ghost from the future
 	model::Hockeyist getGhost(const model::Hockeyist& from, unsigned ticksIncrement);
