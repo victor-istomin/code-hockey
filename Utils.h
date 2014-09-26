@@ -1,6 +1,7 @@
 #pragma once 
 #define PI 3.14159265358979323846
 #include <algorithm>
+#include <cmath>
 
 #ifdef _DEBUG
 #	include <windows.h>
@@ -13,7 +14,8 @@
     template <typename T> std::string toString(const T& var)        {static const std::string fake; return fake;}
 #endif // _DEBUG
 
-inline double toDegrees(double radian)              { return radian * 180.0 / PI; }
+inline double toDegrees(double radian)                          { return radian * 180.0 / PI; }
+inline double toVectorSpeed(double vx, double vy)               { return std::sqrt(vx * vx + vy * vy); };
 
 struct Point
 {
