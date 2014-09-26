@@ -61,6 +61,9 @@ private:
 	TActionPtr getCurrentAction();
 	
 	void updateStatistics();	
+	
+	//! let Hockeyist use brakes, if needed
+	void improveManeuverability();
 
 	// ---- utils
 
