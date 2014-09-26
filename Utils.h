@@ -1,5 +1,16 @@
 #pragma once 
 #define PI 3.14159265358979323846
+#include <algorithm>
+
+#ifdef _DEBUG
+#	include <windows.h>
+#	include <string>
+inline void debugPrint(const std::string& s)		{::OutputDebugStringA((s+"\n").c_str());}
+#else
+#	define debugPrint(x) ;
+#endif // _DEBUG
+
+inline double toDegrees(double radian)              { return radian * 180.0 / PI; }
 
 struct Point
 {
@@ -25,10 +36,22 @@ struct FirePosition
 {
 	Point m_pos;
 	int   m_distance; 
-	int   m_enemyPenalty;    //! TODO - penalty value, indicating near opponent
+	int   m_penalty;    //! TODO - penalty value, indicating near opponent
 
 	FirePosition(const Point& p = Point(), int distance = 0x0FFFFFFF, int penalty = 0x0FFFFFFF) 
-		: m_pos(p), m_distance(distance), m_enemyPenalty(penalty) 
+		: m_pos(p), m_distance(distance), m_penalty(penalty) 
 	{}
 };
 
+template <typename Container, typename Predicate>
+typename Container::const_iterator find_if(const Container& c, const Predicate& p)
+{
+	return std::find_if(std::begin(c), std::end(c), p);
+}
+
+template <typename Container, typename Predicate>
+typename Container::const_pointer find_unit(const Container& c, const Predicate& p)
+{
+	auto found = find_if(c, p);
+	return found != std::end(c) ? &(*found) : nullptr;
+}

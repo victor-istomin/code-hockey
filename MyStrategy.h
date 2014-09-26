@@ -12,7 +12,8 @@ class Statistics;
 class MyStrategy : public Strategy 
 {
 	typedef void (MyStrategy::* TActionPtr)();
-	typedef std::vector<FirePosition>   TFirePositions;
+	typedef std::vector<FirePosition>     TFirePositions;
+	typedef std::vector<model::Hockeyist> THockeyists;
 
 	const model::Hockeyist* m_self;
 	const model::World*     m_world; 
@@ -20,6 +21,7 @@ class MyStrategy : public Strategy
 	model::Move*            m_move;
 
 	static const double STRIKE_ANGLE;
+	static long long    m_initialDefenderId;
 
 	void update(const model::Hockeyist* self, const model::World* world, const model::Game* game, model::Move* move)
 	{
@@ -33,7 +35,6 @@ public:
     MyStrategy();
 	~MyStrategy();
 
-
     void move(const model::Hockeyist& self, const model::World& world, const model::Game& game, model::Move& move);
 
 private:
@@ -45,6 +46,9 @@ private:
 
 	//! defend teammate
 	void defendTeammate();
+
+	//! initial net defend (puck got by opponent right at (sub-)round start
+	void defendInitial();
 	
 	//! just rest after goal
 	void haveRest();
@@ -56,15 +60,21 @@ private:
 
 	// ---- utils
 
-	Point getOpponentNet() const;              //! get preferred attack point in net
+	Point getNet(const model::Player& player, const model::Hockeyist& attacker) const;              //! get preferred attack point in net
 	Point getEstimatedPuckPos() const;
 	Point getFirePoint() const;
 	Point getSubstitutionPoint() const;
 
-	const std::vector<model::Hockeyist>& getHockeyists() const { return m_world->getHockeyists(); }
+	const THockeyists&      getHockeyists() const { return m_world->getHockeyists(); }
 	const model::Hockeyist* getNearestOpponent() const;
+	const model::Hockeyist* getPuckOwner() const;
 
 	TFirePositions fillFirePositions() const;
+	TFirePositions fillDefenderPositions(const model::Hockeyist* attacker, const model::Hockeyist* defender) const;
+	void findInitialDefender();
+
+	bool isRestTime() const {return m_world->getMyPlayer().isJustMissedGoal() || m_world->getOpponentPlayer().isJustMissedGoal(); }
+	bool isInBetween(const Point& first, const model::Unit& inBetween, const model::Unit& second, double gap) const;
 
 	//! get ghost from the future
 	model::Hockeyist getGhost(const model::Hockeyist& from, unsigned ticksIncrement);

@@ -3,6 +3,7 @@
 #define _USE_MATH_DEFINES
 
 #include <cmath>
+#include <cassert>
 #include <cstdlib>
 #include <algorithm>
 
@@ -14,10 +15,10 @@
 #endif
 /**/
 
-
 using namespace model;
 
-const double MyStrategy::STRIKE_ANGLE = PI / 180.0;
+const double MyStrategy::STRIKE_ANGLE        = PI / 180.0;
+long long    MyStrategy::m_initialDefenderId = -1;
 
 void MyStrategy::move(const Hockeyist& self, const World& world, const Game& game, Move& move) 
 {
@@ -55,6 +56,66 @@ void MyStrategy::attackPuck()
 	m_move->setAction(m_self->getState() == SWINGING ? ActionType::CANCEL_STRIKE : ActionType::TAKE_PUCK);
 }
 
+void MyStrategy::defendInitial()
+{
+	// look for defend point between attacker ghost and net corner,
+	const Hockeyist* attacker = getPuckOwner();
+	const Hockeyist* defender = find_unit(getHockeyists(), [](const Hockeyist& h){ return h.getId() == m_initialDefenderId;});
+
+	if (!attacker)
+	{
+		// just go back at the round begin
+		m_move->setSpeedUp(-0.5);
+		return;
+	}
+
+	assert(attacker && !attacker->isTeammate() && defender && defender->isTeammate());
+
+	TFirePositions positions = fillDefenderPositions(attacker, defender);
+	bool isAlreadyDefending = std::find_if(positions.begin(), positions.end(), 
+		[defender](const FirePosition& p) {return defender->getDistanceTo(p.m_pos.x, p.m_pos.y) < defender->getRadius();} ) != positions.end();
+
+	if (isAlreadyDefending)
+	{
+		// go to attacker and take puck
+		const Puck& puck = m_world->getPuck();
+		m_move->setTurn(defender->getAngleTo(puck));
+
+		static const double kSpeedupArea  = m_game->getStickLength();
+		static const double kSlowdownArea = std::min(defender->getRadius()*2, kSpeedupArea / 2);
+		double distanceToPuck = defender->getDistanceTo(puck);
+
+		if (distanceToPuck > kSpeedupArea)
+			m_move->setSpeedUp(1.0);
+		else if (distanceToPuck < kSlowdownArea)
+			m_move->setSpeedUp(-1.0);
+		else
+			m_move->setSpeedUp(0);
+
+		m_move->setAction(TAKE_PUCK);
+	}
+	else
+	{
+		// go to defend point
+		std::sort(positions.begin(), positions.end(), [](const FirePosition& a, const FirePosition& b) { return a.m_distance + a.m_penalty < b.m_distance + b.m_penalty;});
+		Point pos = positions.empty() ? Point(defender->getX(), defender->getY()) : positions.front().m_pos;
+
+		double angleTo = defender->getAngleTo(pos.x, pos.y);
+		bool shouldGoBack = (Statistics::instance()->getMySide() == Statistics::eLEFT_SIDE) ? pos.x < defender->getX() : pos.x > defender->getRadius();
+		if(shouldGoBack)
+		{
+			m_move->setSpeedUp(-1.0);  // go straight backward
+			m_move->setAction(TAKE_PUCK);
+		}
+		else
+		{
+			m_move->setTurn(angleTo);
+			m_move->setSpeedUp(1.0); 
+			m_move->setAction(TAKE_PUCK);
+		}
+	}
+}
+
 
 void MyStrategy::attackNet()
 {
@@ -64,28 +125,23 @@ void MyStrategy::attackNet()
 		{
 			m_move->setAction(ActionType::STRIKE);
 			Statistics::instance()->getPlayer().attack();
-#ifdef _DEBUG
+
 			/**/
-			std::string msg = " !! strike: " + std::to_string(m_self->getId())
+			debugPrint( " !! strike: " + std::to_string(m_self->getId())
 				+ std::to_string(m_self->getX()) + "," + std::to_string(m_self->getY()) + "; s " 
-				+ std::to_string(m_self->getSpeedX()) + ", " + std::to_string(m_self->getSpeedY()) + "\n";
-			::OutputDebugStringA(msg.c_str());
+				+ std::to_string(m_self->getSpeedX()) + ", " + std::to_string(m_self->getSpeedY()));
 			/**/
-#endif
 		}
 		else
 		{
 			/**/
-#ifdef _DEBUG
-			::OutputDebugStringA( " .. cooldown\n");
-#endif
+			debugPrint(" .. cooldown");
 			/**/
 		}
 		return;
 	}
 
-
-	const Point net       = getOpponentNet();
+	const Point net       = getNet(m_world->getOpponentPlayer(), *m_self);
 	const Point firePoint = getFirePoint();
 
 	// TODO - variable [0, 10, 20] strike time?
@@ -108,15 +164,11 @@ void MyStrategy::attackNet()
 			m_move->setAction(ActionType::SWING);
 
 			/**/
-#ifdef _DEBUG
-			std::string msg = " ?? strike prediction: " + std::to_string(m_self->getId()) 
+			debugPrint( " ?? strike prediction: " + std::to_string(m_self->getId()) 
 				+ "g: " + std::to_string(ghost.getX()) + "," + std::to_string(ghost.getY()) 
 				+ "; s: " + std::to_string(m_self->getX()) + "," + std::to_string(m_self->getY())
 				+ "; v: " + std::to_string(ghost.getSpeedX()) + ", " + std::to_string(ghost.getSpeedY()) 
-				+ "; dt: " + std::to_string(strikeTime)
-				+ "\n";
-			::OutputDebugStringA(msg.c_str());
-#endif
+				+ "; dt: " + std::to_string(strikeTime));
 			/**/
 		}
 	}
@@ -149,17 +201,33 @@ void MyStrategy::haveRest()
 		}
 	}
 	
-	// TODO - susbtitute support
+	// TODO - substitute support
 }
 
 // =====================================================================================
 
 MyStrategy::TActionPtr MyStrategy::getCurrentAction()
 {
-	if (m_world->getMyPlayer().isJustMissedGoal() 
-	 || m_world->getOpponentPlayer().isJustMissedGoal())
-	{
+	if (isRestTime())
 		return &MyStrategy::haveRest;
+
+	// is it time to start initial defend on sub-round begin?
+	const PuckStatistics& puckStatistics = Statistics::instance()->getPuck();
+	if (puckStatistics.m_isFirstCatch)
+	{
+		findInitialDefender();
+		if (puckStatistics.m_lastPlayerId != m_world->getMyPlayer().getId())
+		{
+			debugPrint( "Tick: " + std::to_string(m_world->getTick()) + " initial defend needed" );
+
+			if (m_self->getId() == m_initialDefenderId)
+				return &MyStrategy::defendInitial;
+		}
+		else if(m_initialDefenderId != -1)
+		{
+			debugPrint( "Tick: " + std::to_string(m_world->getTick()) + " initial defend finished" );
+			m_initialDefenderId = -1;
+		}
 	}
 	
 	if (m_world->getPuck().getOwnerPlayerId() == m_world->getMyPlayer().getId())
@@ -179,13 +247,11 @@ MyStrategy::TActionPtr MyStrategy::getCurrentAction()
 
 // ======================================================================================
 
-Point MyStrategy::getOpponentNet() const
+Point MyStrategy::getNet(const Player& player, const Hockeyist& attacker) const
 {
-	const Player& opponent = m_world->getOpponentPlayer();
-
-	double netX = (opponent.getNetBack() + opponent.getNetFront()) / 2;
-	double netY = (opponent.getNetBottom() + opponent.getNetTop()) / 2;
-	netY += (m_self->getY() < netY ? 0.5 : -0.5) * m_game->getGoalNetHeight();  // attack far corner
+	double netX = (player.getNetBack() + player.getNetFront()) / 2;
+	double netY = (player.getNetBottom() + player.getNetTop()) / 2;
+	netY += (attacker.getY() < netY ? 0.5 : -0.5) * m_game->getGoalNetHeight();  // attack far corner
 
 	return Point(netX, netY);
 }
@@ -275,9 +341,8 @@ Point MyStrategy::getEstimatedPuckPos() const
 Point MyStrategy::getFirePoint() const
 {
 	const auto& hockeyists = getHockeyists();
-	bool isGoalkeeperPresent = std::find_if(begin(hockeyists), end(hockeyists), [](const Hockeyist& h){ return !h.isTeammate() && h.getType() == GOALIE;} ) 
-		                           != end(hockeyists);
-
+	
+	bool isGoalkeeperPresent = find_unit(hockeyists, [](const Hockeyist& h){ return !h.isTeammate() && h.getType() == GOALIE;} ) != nullptr;
 	if (!isGoalkeeperPresent) 
 	{
 		// if no goalkeeper present - fire from any position
@@ -289,9 +354,9 @@ Point MyStrategy::getFirePoint() const
 
 	// sort positions by < (distance+penalty)
 	std::sort( begin(positions), end(positions), 
-		[](const FirePosition& a, const FirePosition& b) {return a.m_distance + a.m_enemyPenalty < b.m_distance + b.m_enemyPenalty;} );
+		[](const FirePosition& a, const FirePosition& b) {return a.m_distance + a.m_penalty < b.m_distance + b.m_penalty;} );
 
-	Point fire = positions.empty() ? Point(m_self->getX(), m_self->getX()) : positions.front().m_pos;
+	Point fire = positions.empty() ? Point(m_self->getX(), m_self->getY()) : positions.front().m_pos;
 
 	// don't go above top or bottom
 	fire.y = std::max(fire.y, m_game->getRinkTop() + m_self->getRadius());       
@@ -309,16 +374,15 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 	int unitRadius = static_cast<int>(m_self->getRadius());
 
 	const auto& hockeists = getHockeyists();
+	const Hockeyist* goalkeeper = find_unit(hockeists, [](const Hockeyist& h){ return !h.isTeammate() && h.getType() == GOALIE;});
 
 	positions.reserve(std::min(bottom - top, width) / unitRadius * 2);
 
-	const double dangerRadius = m_self->getRadius() + m_game->getStickLength();
-
-	Point goal = getOpponentNet();
-	int   xDirection = m_world->getMyPlayer().getNetFront() > m_world->getOpponentPlayer().getNetFront() ? 1 /*I'm at right*/ : -1/*I'm at left*/;
-	int   yDirection = m_self->getY() > goal.y ? 1 : -1;
-	int   yThreshold = yDirection > 0 ? bottom - unitRadius : top + unitRadius;
-    int   yMargin    = yDirection * unitRadius * 4;   // don't go too close to goalkeeper. TODO: get margin by goalkeeper position
+	Point goal = getNet(m_world->getOpponentPlayer(), *m_self);
+	int    xDirection = m_world->getMyPlayer().getNetFront() > m_world->getOpponentPlayer().getNetFront() ? 1 /*I'm at right*/ : -1/*I'm at left*/;
+	int    yDirection = m_self->getY() > goal.y ? 1 : -1;
+	double yThreshold = yDirection > 0 ? bottom - unitRadius : top + unitRadius;
+    double yMargin    = goalkeeper ? yDirection * unitRadius * 4 : yDirection * unitRadius * 2;   // don't go too close to goalkeeper.
 
     auto isBottomCrossed = [yThreshold](double y){return y > yThreshold;};
     auto isTopCrossed    = [yThreshold](double y){return y < yThreshold;};
@@ -342,6 +406,7 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 				dangerFactor = 1;
 			}
 
+			const double dangerRadius = unitRadius + m_game->getStickLength();
 			double danger = dangerRadius / hockeist.getDistanceTo(x, y);
 			danger *= danger;  // TODO - is this needed?
 			
@@ -353,6 +418,55 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 
 	return positions;
 }
+
+
+MyStrategy::TFirePositions MyStrategy::fillDefenderPositions(const model::Hockeyist* attacker, const model::Hockeyist* defender) const
+{
+	TFirePositions positions;
+	int top        = static_cast<int>(m_game->getRinkTop());
+	int bottom     = static_cast<int>(m_game->getRinkBottom());
+	int width      = static_cast<int>(m_game->getWorldWidth());
+	int unitRadius = static_cast<int>(m_self->getRadius());
+
+	const auto& hockeists = getHockeyists();
+	const Hockeyist* goalkeeper = find_unit(hockeists, [](const Hockeyist& h){ return h.isTeammate() && h.getType() == GOALIE;});
+	const Puck*      puck       = &m_world->getPuck();
+
+	const double centerY = (m_game->getRinkTop() + m_game->getRinkBottom()) / 2;
+	if (abs(attacker->getY() - centerY) < 5)
+	{
+		// attacker is not decided yet, just go back to goalie
+		return TFirePositions(1, FirePosition(Point((defender->getX() + goalkeeper->getX())/2, defender->getY()), 0, 0));
+	}
+
+	positions.reserve(std::min(bottom - top, width) / unitRadius * 2);
+
+	Point goal = getNet(m_world->getMyPlayer(), *attacker);
+	int   xDirection = m_world->getMyPlayer().getNetFront() > m_world->getOpponentPlayer().getNetFront() ? -1 /*I'm at right*/ : 1/*I'm at left*/;
+	int   yDirection = attacker->getY() > goal.y ? 1 : -1;
+	double yMargin    = goalkeeper ? yDirection * unitRadius * 4 : yDirection * unitRadius * 2;   // don't go too close to goalkeeper.
+	double yThreshold = yDirection > 0 ? bottom - unitRadius : top + unitRadius;
+
+	auto isBottomCrossed = [yThreshold](double y){return y > yThreshold;};
+	auto isTopCrossed    = [yThreshold](double y){return y < yThreshold;};
+
+	for (double y = goal.y + yMargin; yDirection > 0 ? !isBottomCrossed(y) : !isTopCrossed(y); y += yDirection * unitRadius / 2.0)
+	{
+		double delta   = abs(y - goal.y);
+		double x       = goal.x + delta * xDirection;
+		int    penalty = static_cast<int>(toDegrees(std::abs(defender->getAngleTo(x, y))) * std::max(0.5, std::abs(defender->getAngularSpeed())) / 2);
+
+		// TODO
+
+		if (isInBetween(Point(x,y), *defender, *attacker, puck->getRadius()))
+			continue; 		// don't add secured positions (behind defender)
+
+		positions.push_back(FirePosition(Point(x, y), static_cast<int>(m_self->getDistanceTo(x, y)), penalty));
+	}
+
+	return positions;
+}
+
 
 void MyStrategy::updateStatistics()
 {
@@ -380,7 +494,26 @@ void MyStrategy::updateStatistics()
 		Statistics::init(Range(topLeftRink, bottomRightRink), mySide, m_world->getMyPlayer().getName());
 	}
 
+	// update player statistics
 	Statistics::instance()->getPlayer().update(me.getGoalCount(), m_world->getOpponentPlayer().getGoalCount(), me.isStrategyCrashed());
+
+	// update puck statistics
+	PuckStatistics& puckStatistics = Statistics::instance()->getPuck();
+	if (isRestTime() && !puckStatistics.m_isJustReset)
+	{
+		puckStatistics.reset();
+		m_initialDefenderId = -1;
+	}
+	else
+	{
+		long long puckPlayerId = m_world->getPuck().getOwnerPlayerId();
+		if (puckStatistics.m_lastPlayerId != puckPlayerId)
+		{
+			puckStatistics.m_isFirstCatch = puckStatistics.m_isJustReset;
+			puckStatistics.m_lastPlayerId = puckPlayerId;
+			puckStatistics.m_isJustReset  = false;
+		}
+	}
 }
 
 Point MyStrategy::getSubstitutionPoint() const
@@ -412,4 +545,56 @@ model::Hockeyist MyStrategy::getGhost(const model::Hockeyist& from, unsigned tic
 	double y = from.getY() + from.getSpeedY() * ticksIncrement * kFrictionLoses;
 	return Hockeyist(0, 0, 0, 0, from.getRadius(),  x, y, from.getSpeedX() * speedLose, from.getSpeedY() * speedLose, from.getAngle(), from.getAngularSpeed(), 
 		from.isTeammate(), from.getType(), 0, 0, 0, 0, 0, from.getState(), 0, 0, 0, 0, from.getLastAction(), from.getLastActionTick());
+}
+
+void MyStrategy::findInitialDefender()
+{
+	if (m_initialDefenderId != -1)
+		return; // already set, no change allowed
+
+	const Hockeyist* puckOwner       = getPuckOwner();
+	const Hockeyist* nearestTeammate = nullptr;
+	const Point      net             = getNet(m_world->getMyPlayer(), puckOwner ? *puckOwner : *m_self);
+
+	for (const Hockeyist& h: m_world->getHockeyists())
+	{
+		if (!h.isTeammate() || h.getType() == GOALIE)
+			continue;
+
+		if (!nearestTeammate || h.getDistanceTo(net.x, net.y) < nearestTeammate->getDistanceTo(net.x, net.y))
+			nearestTeammate = &h;
+	}
+
+	assert(nearestTeammate && "should be found!");
+	m_initialDefenderId = nearestTeammate ? nearestTeammate->getId() : -1;
+}
+
+const model::Hockeyist* MyStrategy::getPuckOwner() const
+{
+	long long ownerUnitId = m_world->getPuck().getOwnerHockeyistId();
+	return find_unit(getHockeyists(), [ownerUnitId](const Hockeyist& h) {return h.getId() == ownerUnitId;});
+}
+
+bool MyStrategy::isInBetween(const Point& first, const model::Unit& inBetween, const model::Unit& second, double gap) const
+{
+	double distanceToFirst   = second.getDistanceTo(first.x, first.y);
+	double distanceToBetween = second.getDistanceTo(inBetween);
+	if (distanceToBetween >= distanceToFirst)
+		return false;
+
+	/*             . second
+	              /
+			     /
+	            / 
+	           / \ dL 
+	          /   \
+		     /     'inBetween 
+            /
+	  first'    
+
+	  return dL < gap;
+	*/
+	double dA = std::abs(second.getAngleTo(first.x, first.y) - second.getAngleTo(inBetween));
+	double dL  = std::tan(dA) * distanceToBetween;
+	return dL < gap;
 }

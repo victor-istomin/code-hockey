@@ -22,6 +22,16 @@ private:
 	PlayerStatistics& operator=(const PlayerStatistics&); //!< denied
 };
 
+struct PuckStatistics
+{
+	bool      m_isJustReset;
+	bool      m_isFirstCatch;
+	long long m_lastPlayerId;
+
+	PuckStatistics() : m_isFirstCatch(true), m_isJustReset(true), m_lastPlayerId(-1)    {}
+	void reset()                                                                        {*this = PuckStatistics();}
+};
+
 class Statistics
 {
 public:
@@ -32,15 +42,18 @@ public:
 		eRIGHT_SIDE,
 	};
 
+	typedef long long TId;
+
 private:
 	Range            m_subsituteRange;
 	Side             m_mySide;
 	PlayerStatistics m_player;
-
+	PuckStatistics   m_puck;
+	
 	static std::unique_ptr<Statistics> m_instance;
 
 	Statistics(const Range& subsituteRange, Side mySide, const std::string& playerName ) 
-		: m_subsituteRange(subsituteRange), m_mySide(mySide), m_player(playerName) 
+		: m_subsituteRange(subsituteRange), m_mySide(mySide), m_player(playerName), m_puck()
 	{}
 
 	Statistics(const Statistics&); //!< denied
@@ -56,6 +69,7 @@ public:
 	const Range& getSubstitutionRange() const { return m_subsituteRange; }
 
 	PlayerStatistics& getPlayer()             {return m_player;}
+	PuckStatistics&   getPuck()               {return m_puck;}
 };
 
 
