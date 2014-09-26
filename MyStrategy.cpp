@@ -487,7 +487,11 @@ MyStrategy::TFirePositions MyStrategy::fillDefenderPositions(const model::Hockey
 	{
 		// attacker is not decided yet, just go back to goalie
 		double goalkeeperX = goalkeeper ? goalkeeper->getX() : m_world->getMyPlayer().getNetFront();
-		return TFirePositions(1, FirePosition(Point((defender->getX() + goalkeeperX)/2, defender->getY()), 0, 0));
+		double targetX     = Statistics::instance()->getMySide() == Statistics::eLEFT_SIDE
+			? goalkeeperX + m_self->getRadius() * 4
+			: goalkeeperX - m_self->getRadius() * 4;
+
+		return TFirePositions(1, FirePosition(Point(targetX, defender->getY()), 0, 0));
 	}
 
 	positions.reserve(std::min(bottom - top, width) / unitRadius * 2);
