@@ -231,7 +231,7 @@ void MyStrategy::attackNet()
 
 	// TODO - variable [0, 10, 20] strike time?
 	unsigned strikeTime = static_cast<unsigned>(m_game->getSwingActionCooldownTicks() + abs(m_self->getAngleTo(net.x, net.y) / m_game->getHockeyistTurnAngleFactor()));
-	const Hockeyist ghost = getGhost(*m_self, strikeTime);
+	const Hockeyist ghost = getGhost(*m_self, strikeTime, m_self->getAngle());
 
 	double angleToNet       = ghost.getAngleTo(net.x, net.y);
 	double angleToFirePoint = m_self->getAngleTo(firePoint.x, firePoint.y);
@@ -348,14 +348,54 @@ Point MyStrategy::getNet(const Player& player, const Hockeyist& attacker, Prefer
 
 void MyStrategy::defendTeammate()
 {
-	const Hockeyist* nearest = getNearestOpponent();
-	if ( nearest == nullptr )
+	static const double kSAFE_ANGLE      = m_game->getStrikeAngleDeviation() + STRIKE_ANGLE;
+	static const double kDANGEROUS_ANGLE = m_game->getStickSector() / 2;
+
+	const Hockeyist* nearestSafe   = nullptr;
+	const Hockeyist* nearestUnsafe = nullptr;
+	const Puck&      puck          = m_world->getPuck();
+	const Hockeyist* vip           = find_unit(getHockeyists(), [&puck](const Hockeyist& h){return h.getId() == puck.getOwnerHockeyistId();} );
+
+	assert(vip && "no one to defend");
+	if (!vip)
 		return;
+
+	// get nearest enemies
+	for (const Hockeyist& h: getHockeyists())
+	{
+		if (h.isTeammate() || h.getType() == GOALIE || h.getState() == HockeyistState::RESTING || h.getState() == KNOCKED_DOWN)
+			continue;
+
+		const double distance = m_self->getDistanceTo(h);
+		const double angle    = m_self->getAngleTo(h);
+		bool isSafe = true;
+		if (distance < m_game->getStickLength())
+		{
+			const Hockeyist attacking = getGhost(*m_self, 0, m_self->getAngle() + angle);
+			if (attacking.getAngleTo(puck) < kSAFE_ANGLE || attacking.getAngleTo(*vip) < kSAFE_ANGLE)
+				isSafe = false;
+		}
+
+		typedef const Hockeyist* TPtr;
+		TPtr& nearest = isSafe ? nearestSafe : nearestUnsafe;
+
+		if (nearest == nullptr || distance < m_self->getDistanceTo(nearest->getX(), nearest->getY()))
+		{
+			nearest = &h;
+		}
+	}
+	
+	static const double centerX = (m_game->getRinkRight() - m_game->getRinkLeft()) / 2;
+	const Hockeyist* nearest = nearestSafe ? nearestSafe : nearestUnsafe;
 
 	double angleToNearest = m_self->getAngleTo(*nearest); 
 	bool   isCanStrike    = m_self->getDistanceTo(*nearest) < m_game->getStickLength() 
 		                 && m_self->getRemainingCooldownTicks() == 0
 		                 && angleToNearest < (m_game->getStickSector() / 2.0);
+
+	const Player& me = m_world->getMyPlayer();
+	double netX = me.getNetFront()	+ m_self->getRadius() * (Statistics::instance()->getMySide() == Statistics::eLEFT_SIDE ? -2 : 2);
+	double netY = (me.getNetTop() + me.getNetBottom()) / 2;
 
 	if (m_self->getState() == HockeyistState::SWINGING)
 	{
@@ -370,32 +410,77 @@ void MyStrategy::defendTeammate()
 	{
 		if (isCanStrike)
 		{
+			Hockeyist attacking   = getGhost(*m_self, 0, m_self->getAngle() + angleToNearest);
+			double    angleToPuck = attacking.getAngleTo(puck);
+			double    angleToVip  = attacking.getAngleTo(*vip);
+			double    teammateDistance = std::min(attacking.getDistanceTo(puck), attacking.getDistanceTo(*vip));
+
+			if (teammateDistance <= m_game->getStickLength())
+			{
+				double correction = 0;
+				/* TODO
+				if (std::abs(angleToPuck) < kDANGEROUS_ANGLE)
+				{
+					int sign    = (angleToPuck > kDANGEROUS_ANGLE) ? -1 : 1;
+					correction += (kDANGEROUS_ANGLE - std::abs(angleToPuck) + kSAFE_ANGLE) * sign;
+					attacking   = getGhost(*m_self, 0, m_self->getAngle() + angleToNearest + correction);
+					angleToVip  = attacking.getAngleTo(*vip);
+					angleToPuck = attacking.getAngleTo(puck);
+				}
+
+				if (std::abs(angleToVip) < kDANGEROUS_ANGLE)
+				{
+					int sign    = (angleToVip > kDANGEROUS_ANGLE) ? -1 : 1;
+					correction += (kDANGEROUS_ANGLE - std::abs(angleToVip) + kSAFE_ANGLE) * sign;
+					attacking   = getGhost(*m_self, 0, m_self->getAngle() + angleToNearest + correction);
+					angleToVip  = attacking.getAngleTo(*vip);
+					angleToPuck = attacking.getAngleTo(puck);
+				}*/
+
+				angleToNearest += correction;
+				if ( (std::abs(angleToVip) < kDANGEROUS_ANGLE) || (std::abs(angleToPuck) < kDANGEROUS_ANGLE) )
+				{
+					// still can't strike, go backwards to my net?
+					isCanStrike = false;
+
+					double angle = - m_self->getAngleTo(netX, netY);
+					m_move->setTurn(angle);
+					m_move->setSpeedUp(-1);
+					return;  // break processing
+				}
+			}
+		}
+
+		if (isCanStrike && std::abs(angleToNearest) < (kDANGEROUS_ANGLE - m_game->getStrikeAngleDeviation()))
+		{
 			m_move->setAction(ActionType::SWING);
 		}
 		else
 		{
+			// take attack position between enemy and my net
+			static const  double stickLength = m_game->getStickLength();
+			double attackDistance = std::min(stickLength, m_self->getRadius() * 2);
+			double dx = 0;
+			double dy = 0;
+
+			double distance = m_self->getDistanceTo(*nearest);
+			if (distance > stickLength / 2)
+			{
+				double distanceFactor = std::min(3.0, distance / stickLength);
+				dx = distanceFactor * netX > nearest->getX() ? attackDistance : -attackDistance;
+				dy = distanceFactor * netY > nearest->getY() ? attackDistance : -attackDistance;
+
+			}
+			else
+			{
+				debugPrint("Opponent is too close, try punching from this position");
+			}
+
 			m_move->setSpeedUp(1.0);
-			m_move->setTurn(angleToNearest);
+			m_move->setTurn   (m_self->getAngleTo(nearest->getX() + dx, nearest->getY() + dy));
+			improveManeuverability();
 		}
 	}
-}
-
- const Hockeyist* MyStrategy::getNearestOpponent() const
-{
-	const Hockeyist* nearest = nullptr;
-	for (const Hockeyist& hockeist: getHockeyists())
-	{
-		if (hockeist.isTeammate() || hockeist.getState() == HockeyistState::RESTING)
-			continue;
-
-		if (nearest == nullptr 
-			|| m_self->getDistanceTo(hockeist.getX(), hockeist.getY()) < m_self->getDistanceTo(nearest->getX(), nearest->getY()))
-		{
-			nearest = &hockeist;
-		}
-	}
-
-	return nearest;
 }
 
 Point MyStrategy::getEstimatedPuckPos() const
@@ -458,9 +543,10 @@ Point MyStrategy::getFirePoint() const
 MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 {
 	TFirePositions positions;
-	int top        = static_cast<int>(m_game->getRinkTop());
-	int bottom     = static_cast<int>(m_game->getRinkBottom());
-	int width      = static_cast<int>(m_game->getWorldWidth());
+	static const int    top       = static_cast<int>(m_game->getRinkTop());
+	static const int    bottom    = static_cast<int>(m_game->getRinkBottom());
+	static const double netHeight = m_world->getOpponentPlayer().getNetBottom() - m_world->getOpponentPlayer().getNetTop();
+	static const int    width     = static_cast<int>(m_game->getWorldWidth());
 	int unitRadius = static_cast<int>(m_self->getRadius());
 
 	const auto& hockeists = getHockeyists();
@@ -480,7 +566,7 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 	int yDirection = fireFrom == PreferredFire::eDOWN ? 1 : -1;
 	
 	double yThreshold = yDirection > 0 ? bottom - unitRadius : top + unitRadius;
-    double yMargin    = goalkeeper ? yDirection * unitRadius * 4 : yDirection * unitRadius * 2;   // don't go too close to goalkeeper.
+    double yMargin    = yDirection * (goalkeeper ?  netHeight : unitRadius * 2);   // don't go too close to goalkeeper.
 
     auto isBottomCrossed = [yThreshold](double y){return y > yThreshold;};
     auto isTopCrossed    = [yThreshold](double y){return y < yThreshold;};
@@ -654,14 +740,14 @@ Point MyStrategy::getSubstitutionPoint() const
 	return result;
 }
 
-model::Hockeyist MyStrategy::getGhost(const model::Hockeyist& from, unsigned ticksIncrement)
+model::Hockeyist MyStrategy::getGhost(const model::Hockeyist& from, unsigned ticksIncrement, double overrideAngle)
 {
 	static const double kFrictionLoses = 0.95;
 	const double speedLose = pow(kFrictionLoses, ticksIncrement);
 
 	double x = from.getX() + from.getSpeedX() * ticksIncrement * kFrictionLoses;
 	double y = from.getY() + from.getSpeedY() * ticksIncrement * kFrictionLoses;
-	return Hockeyist(0, 0, 0, 0, from.getRadius(),  x, y, from.getSpeedX() * speedLose, from.getSpeedY() * speedLose, from.getAngle(), from.getAngularSpeed(), 
+	return Hockeyist(0, 0, 0, 0, from.getRadius(),  x, y, from.getSpeedX() * speedLose, from.getSpeedY() * speedLose, overrideAngle, from.getAngularSpeed(), 
 		from.isTeammate(), from.getType(), 0, 0, 0, 0, 0, from.getState(), 0, 0, 0, 0, from.getLastAction(), from.getLastActionTick());
 }
 

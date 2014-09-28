@@ -72,7 +72,6 @@ private:
 	Point getSubstitutionPoint() const;
 
 	const THockeyists&      getHockeyists() const { return m_world->getHockeyists(); }
-	const model::Hockeyist* getNearestOpponent() const;
 	const model::Hockeyist* getPuckOwner() const;
 
 	TFirePositions fillFirePositions() const;
@@ -83,7 +82,7 @@ private:
 	static bool isInBetween(const Point& first, const model::Unit& inBetween, const model::Unit& second, double gap);
 
 	//! get ghost from the future
-	model::Hockeyist getGhost(const model::Hockeyist& from, unsigned ticksIncrement);
+	model::Hockeyist getGhost(const model::Hockeyist& from, unsigned ticksIncrement, double overrideAngle);
 };
 
 #endif
