@@ -387,6 +387,8 @@ void MyStrategy::defendTeammate()
 	
 	static const double centerX = (m_game->getRinkRight() - m_game->getRinkLeft()) / 2;
 	const Hockeyist* nearest = nearestSafe ? nearestSafe : nearestUnsafe;
+    if (!nearest)
+        return;
 
 	double angleToNearest = m_self->getAngleTo(*nearest); 
 	bool   isCanStrike    = m_self->getDistanceTo(*nearest) < m_game->getStickLength() 
