@@ -5,6 +5,10 @@
 #include <string>
 
 #ifdef _DEBUG
+#  define USE_LOG
+#endif
+
+#ifdef USE_LOG
 #	include <windows.h>
     inline void debugPrint(const std::string& s)		            {::OutputDebugStringA((s+"\n").c_str());}
     template <typename T> std::string toString(const T& var)        {return std::to_string(var);}
@@ -12,7 +16,7 @@
 #else
 #	define debugPrint(x) ;
     template <typename T> std::string toString(const T& var)        {static const std::string fake; return fake;}
-#endif // _DEBUG
+#endif // USE_LOG
 
 inline double toDegrees(double radian)                          { return radian * 180.0 / PI; }
 inline double toVectorSpeed(double vx, double vy)               { return std::sqrt(vx * vx + vy * vy); };

@@ -13,7 +13,7 @@ void Statistics::init(const Range& subsituteRange, Statistics::Side mySide, cons
 
 Statistics::~Statistics()
 {
-#ifdef _DEBUG
+#ifdef USE_LOG
 	// unload statistics to file
 	const std::string filename = "stats_" + toString(time(nullptr)) + "_" + toString(clock()) + ".log";
 
@@ -35,7 +35,7 @@ void Statistics::onPuckLoose()
 
 std::string PlayerStatistics::toString()
 {
-#ifdef _DEBUG
+#ifdef USE_LOG
 	return m_name + "; score: " + ::toString(m_goalsMade) + "; got: " + ::toString(m_goalsGot) 
 	              + "; attacks: " + ::toString(m_attacksCount) + "(" + ::toString(m_goalsMade * 100.0 / m_attacksCount)
 				  + "%); crashed: " + std::string(m_isCrashed ? "true" : "false");

@@ -8,13 +8,11 @@
 #include <algorithm>
 #include <set>
 
-/**/
-#ifdef _DEBUG
+#ifdef USE_LOG
 #include <windows.h>
 #undef min
 #undef max
 #endif
-/**/
 
 using namespace model;
 
@@ -172,17 +170,13 @@ void MyStrategy::attackNet()
 			m_move->setAction(ActionType::STRIKE);
 			Statistics::instance()->getPlayer().attack();
 
-			/**/
 			debugPrint( " !! strike: " + toString(m_self->getId())
 				+ toString(m_self->getX()) + "," + toString(m_self->getY()) + "; s " 
 				+ toString(m_self->getSpeedX()) + ", " + toString(m_self->getSpeedY()));
-			/**/
 		}
 		else
 		{
-			/**/
 			debugPrint(" .. cooldown");
-			/**/
 		}
 		return;
 	}
@@ -247,13 +241,11 @@ void MyStrategy::attackNet()
 		{
 			m_move->setAction(ActionType::SWING);
 
-			/**/
 			debugPrint( " ?? strike prediction: " + toString(m_self->getId()) 
 				+ "g: " + toString(ghost.getX()) + "," + toString(ghost.getY()) 
 				+ "; s: " + toString(m_self->getX()) + "," + toString(m_self->getY())
 				+ "; v: " + toString(ghost.getSpeedX()) + ", " + toString(ghost.getSpeedY()) 
 				+ "; dt: " + toString(strikeTime));
-			/**/
 		}
 	}
 	else
