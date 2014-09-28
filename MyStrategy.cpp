@@ -492,24 +492,34 @@ MyStrategy::TFirePositions MyStrategy::fillFirePositions() const
 		int    penalty = 0;
 
 		// calculate danger penalty: TODO: what if path to (x,y) is blocked?
-		for (const Hockeyist& hockeist: hockeists)
+		bool isEnemyAtPosition = false;
+		bool isEnemyInBetween  = false;
+		bool isEnemyStickThere = false;
+		for (const Hockeyist& h: hockeists)
 		{
-			double dangerFactor = 1;
-			if(hockeist.isTeammate())
-			{
-				dangerFactor = hockeist.getId() == m_self->getId() ? -1 : -0.5;
-			}
-			else
-			{
-				dangerFactor = 1;
-			}
+			static const double kMAX_STICK_ANGLE     = m_game->getStickSector()/2;
+			static const double kPUCK_SIZE           = m_world->getPuck().getRadius();
+			static const double kSTICK_LENGTH        = m_game->getStickLength();
 
-			const double dangerRadius = unitRadius + m_game->getStickLength();
-			double danger = dangerRadius / hockeist.getDistanceTo(x, y);
-			danger *= danger;  // TODO - is this needed?
-			
-			penalty += static_cast<int>(danger * dangerFactor * m_game->getStickLength());
+			if(h.isTeammate())
+				continue;
+
+			const double enemyDistance = h.getDistanceTo(x, y);
+			const double enemyAngle    = std::abs(h.getAngleTo(x, y));
+			isEnemyAtPosition = isEnemyAtPosition || ( enemyDistance <= h.getRadius() && enemyAngle <= PI / 2 );
+			isEnemyStickThere = isEnemyStickThere || ( !isEnemyAtPosition && enemyAngle <= kMAX_STICK_ANGLE && enemyDistance <= kSTICK_LENGTH );
+			isEnemyInBetween  = isEnemyInBetween  || ( !isEnemyAtPosition && enemyAngle <= PI / 2 && isInBetween(Point(x,y), h, *m_self, kPUCK_SIZE) );
 		}
+
+		static const int kENEMY_PENALTY         = 180; 
+		static const int kENEMY_BETWEEN_PENALTY = 165; 
+		static const int kENEMY_STICK_PENALTY   = 60;
+		if (isEnemyAtPosition)
+			penalty += kENEMY_PENALTY;
+		if (isEnemyInBetween)
+			penalty += kENEMY_BETWEEN_PENALTY;
+		if (isEnemyStickThere)
+			penalty += kENEMY_STICK_PENALTY;
 
 		positions.push_back(FirePosition(Point(x, y), static_cast<int>(m_self->getDistanceTo(x, y)), penalty));
 	}
