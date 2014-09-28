@@ -351,6 +351,10 @@ void MyStrategy::defendTeammate()
 	static const double kSAFE_ANGLE      = m_game->getStrikeAngleDeviation() + STRIKE_ANGLE;
 	static const double kDANGEROUS_ANGLE = m_game->getStickSector() / 2;
 
+	const Player& me = m_world->getMyPlayer();
+	const double netX = me.getNetFront()	+ m_self->getRadius() * (Statistics::instance()->getMySide() == Statistics::eLEFT_SIDE ? -2 : 2);
+	const double netY = (me.getNetTop() + me.getNetBottom()) / 2;
+
 	const Hockeyist* nearestSafe   = nullptr;
 	const Hockeyist* nearestUnsafe = nullptr;
 	const Puck&      puck          = m_world->getPuck();
@@ -388,16 +392,18 @@ void MyStrategy::defendTeammate()
 	static const double centerX = (m_game->getRinkRight() - m_game->getRinkLeft()) / 2;
 	const Hockeyist* nearest = nearestSafe ? nearestSafe : nearestUnsafe;
     if (!nearest)
-        return;
+	{
+		// TODO - remove copy-paste, go to center of net if anyone is knocked down
+		double angle = - m_self->getAngleTo(netX, netY);
+		m_move->setTurn(angle);
+		m_move->setSpeedUp(-1);
+		return;  // break processing
+	}
 
 	double angleToNearest = m_self->getAngleTo(*nearest); 
 	bool   isCanStrike    = m_self->getDistanceTo(*nearest) < m_game->getStickLength() 
 		                 && m_self->getRemainingCooldownTicks() == 0
 		                 && angleToNearest < (m_game->getStickSector() / 2.0);
-
-	const Player& me = m_world->getMyPlayer();
-	double netX = me.getNetFront()	+ m_self->getRadius() * (Statistics::instance()->getMySide() == Statistics::eLEFT_SIDE ? -2 : 2);
-	double netY = (me.getNetTop() + me.getNetBottom()) / 2;
 
 	if (m_self->getState() == HockeyistState::SWINGING)
 	{
