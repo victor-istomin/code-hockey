@@ -469,7 +469,6 @@ void MyStrategy::defendTeammate()
 				double distanceFactor = std::min(3.0, distance / stickLength);
 				dx = distanceFactor * netX > nearest->getX() ? attackDistance : -attackDistance;
 				dy = distanceFactor * netY > nearest->getY() ? attackDistance : -attackDistance;
-
 			}
 			else
 			{
